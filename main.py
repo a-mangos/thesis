@@ -57,7 +57,7 @@ if __name__ == "__main__":
     open_serial(ser)
 
     # Read in file
-    fetal_head = o3d.io.read_triangle_mesh("../whole_head_model.STL")
+    fetal_head = o3d.io.read_triangle_mesh("whole_head_model.STL")
 
     # Initial offset from original model to line up the head with axes of render
     # offsets: flexion -0.4 rotation -0.615 deflection -0.2
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     data_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
     points = []
-    with open(r"../picked_points.txt", "r") as f:
+    with open(r"picked_points.txt", "r") as f:
         for line in f:
             points.append([int(e) for e in line.split()])
 
