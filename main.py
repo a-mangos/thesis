@@ -87,27 +87,19 @@ if __name__ == "__main__":
 
     # MERGE_CLOSE_VERTICES - INTERESTING FOR MERGING COLORS
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100, origin=fetal_head_r.get_center())
-    vis.add_geometry(coord_frame)
+    # vis.add_geometry(coord_frame)
     vis.add_geometry(fetal_head_r)
-
-    view_control = vis.get_view_control()
-    parameters = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-02-22-08-39-51.json")
-    view_control.convert_from_pinhole_camera_parameters(parameters, True)
 
     # vis.run()
     # vis.destroy_window()
     # vertices_list = vis.get_picked_points()
     #
-    # with open(r"../picked_points.txt", "w") as fp:
+    # with open(r"picked_points.txt", "w") as fp:
     #     for item in vertices_list:
     #         fp.write("%s\n" % item.index)
 
-    # previous_flexion = fetal_head_r.get_rotation_matrix_from_xyz((0, 0, 0))
-    # previous_roll = fetal_head_r.get_rotation_matrix_from_xyz((0, 0, 0))
-
     roll_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     flexion_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    yaw_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
     data_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
@@ -115,6 +107,19 @@ if __name__ == "__main__":
     with open(r"picked_points.txt", "r") as f:
         for line in f:
             points.append([int(e) for e in line.split()])
+
+    vertices = np.asarray(fetal_head_r.vertices)
+    spheres = []
+    for point in points:
+        point_coord = vertices[point]
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=3, resolution=5)
+        sphere.translate(np.transpose(point_coord))
+        spheres.append(sphere)
+        vis.add_geometry(sphere)
+
+    view_control = vis.get_view_control()
+    parameters = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-02-22-08-39-51.json")
+    view_control.convert_from_pinhole_camera_parameters(parameters, True)
 
     previous_position = np.identity(3)
     while True:
@@ -130,28 +135,25 @@ if __name__ == "__main__":
         flexion_rolling.pop(0)
 
         fetal_head_r.rotate(np.transpose(previous_position), fetal_head_r.get_center())
+        for sphere in spheres:
+            sphere.rotate(np.transpose(previous_position), fetal_head_r.get_center())
 
-        new_position = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi / 180,
+        new_position = fetal_head_r.get_rotation_matrix_from_xyz((0,
                                                                   circmean(roll_rolling, high=360) * np.pi / 180,
                                                                   0))
-
+        for sphere in spheres:
+            sphere.rotate(new_position, fetal_head_r.get_center())
         fetal_head_r.rotate(new_position, fetal_head_r.get_center())
         previous_position = new_position
 
         data_rolling.append(normalize_data(data[41] * 14 / 512))
         data_rolling.pop(0)
 
-        vertex_colours = np.asarray(fetal_head_r.vertex_colors)
-        for point in points:
-            vertex_colours[point] = [mean(data_rolling), 1 - mean(data_rolling), 0]
-
-        fetal_head_r.vertex_colors = o3d.utility.Vector3dVector(vertex_colours)
-
-        # fetal_head_r.vertex_colors = o3d.utility.Vector3dVector(
-        #     np.random.uniform(0, 1, size=(len(fetal_head_r.vertices), 3)))
-
-        # fetal_head_r.paint_uniform_color([1, 0, 0])
+        for sphere in spheres:
+            sphere.paint_uniform_color([mean(data_rolling), 1 - mean(data_rolling), 0])
 
         vis.update_geometry(fetal_head_r)
+        for sphere in spheres:
+            vis.update_geometry(sphere)
         vis.update_renderer()
         vis.poll_events()
