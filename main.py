@@ -25,18 +25,6 @@ def calculate_head_flexion(force_x: int, force_z: int) -> float:
     calibrated_z = (force_z - 290) / 57
     return math.atan2(calibrated_x, calibrated_z) * 180 / math.pi - 90
 
-# def calibrate_x_axis(data_x):
-#     # 370 in OA, 271 in OP  -> 320.5 mean. Then solve for 9.8 m/s^2 in OA to get 5.05
-#     return (data_x - 321) / 67
-#
-# def calibrate_y_axis(data_y):
-#     # 359 in OA, 272 in OP -> 315.5 mean. Then solve for 9.8 m/s^2 to get 4.44
-#     return (data_y - 323.5) / 66.5
-#
-# def calibrate_z_axis(data_z):
-#     # 289 in OA, 296 in OP -> 292.5 mean. Then solve for 9.8 m/s^2 to get 0.51
-#     return (data_z - 290) / 57
-1
 def read_from_serial(ser):
     def align_to_header(ser):
         header = [0xDE, 0xAD, 0xBE, 0xEF, 0xC0, 0x01, 0xCA, 0xFE]
@@ -86,7 +74,7 @@ if __name__ == "__main__":
 
     # MERGE_CLOSE_VERTICES - INTERESTING FOR MERGING COLORS
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100, origin=fetal_head_r.get_center())
-    # vis.add_geometry(coord_frame)
+    vis.add_geometry(coord_frame)
     vis.add_geometry(fetal_head_r)
 
     view_control = vis.get_view_control()
@@ -119,92 +107,22 @@ if __name__ == "__main__":
     while True:
         data = read_from_serial(ser)
 
-        # roll = calculate_head_rotation(data[13], data[14])
-        # roll_rolling.append(roll)
-        # roll_rolling.pop(0)
-        #
-        # flexion = calculate_head_flexion(data[13], data[15])
-        # flexion_rolling.append(flexion)
-        # flexion_rolling.pop(0)
+        roll = calculate_head_rotation(data[13], data[14])
+        roll_rolling.append(roll)
+        roll_rolling.pop(0)
 
-        # roll = (data[13] - 321) / 67 * 9.8
-        # roll_rolling.append(roll)
-        # roll_rolling.pop(0)
-        #
-        # flexion = (data[14] - 323.5) / 66.5 * 9.8
-        # flexion_rolling.append(flexion)
-        # flexion_rolling.pop(0)
-        #
-        # yaw = (data[15] - 290) / 57 * 9.8
-        # yaw_rolling.append(yaw)
-        # yaw_rolling.pop(0)
-
-
+        flexion = calculate_head_flexion(data[13], data[15])
+        flexion_rolling.append(flexion)
+        flexion_rolling.pop(0)
 
         fetal_head_r.rotate(np.transpose(previous_position), fetal_head_r.get_center())
 
-        # new_position = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi / 180,
-        #                                                           circmean(roll_rolling, high=360) * np.pi / 180,
-        #                                                           0)
-        # new_roll = fetal_head_r.get_rotation_matrix_from_xyz((0,
-        #                                                       circmean(roll_rolling, high=360) * np.pi / 180,
-        #                                                       0))
-        # new_flexion = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi / 180,
-        #                                                         0,
-        #                                                         0))
-
-        data_as_aqua = AQUA()
-        data_as_aqua.acc = np.asarray([mean(roll_rolling), mean(flexion_rolling), 0])
-        data_quaternion = data_as_aqua.estimate(data_as_aqua.acc)
-
-        new_position = fetal_head_r.get_rotation_matrix_from_quaternion(data_quaternion)
-
-        # new_position = np.matmul(new_flexion, new_roll)
+        new_position = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi / 180,
+                                                                  circmean(roll_rolling, high=360) * np.pi / 180,
+                                                                  0))
 
         fetal_head_r.rotate(new_position, fetal_head_r.get_center())
         previous_position = new_position
-
-        # fetal_head_r.rotate(np.transpose(previous_flexion))
-        # fetal_head_r.rotate(np.transpose(previous_roll))
-
-        # fetal_head_r.rotate(np.transpose(previous_position))
-        #
-        # r1 = R.from_euler("xyz", [0, circmean(roll_rolling, high=360) * np.pi / 180, 0], degrees=False)
-        #
-        # r2 = R.from_euler("XYZ", [circmean(flexion_rolling, high=360) * np.pi / 180, 0, 0], degrees=False)
-        #
-        # r2.apply(r1)
-        #
-        # new_position = r2.as_matrix()
-        #
-        # # new_roll = fetal_head_r.get_rotation_matrix_from_zyx((0,
-        # #                                                       circmean(roll_rolling, high=360) * np.pi / 180,
-        # #                                                       0))
-        # #
-        # # new_flexion = fetal_head.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi / 180,
-        # #                                                        0,
-        # #                                                        0))
-        #
-        # new_position = new_flexion * new_roll
-
-        # fetal_head_r.rotate(new_position)
-        #
-        # # previous_roll = new_roll
-        # # previous_flexion = new_flexion
-        #
-        # previous_position = new_position
-
-        # print(data[41] * 14 / 512)
-        # print(data[33] * 14/512, data[34] * 14/512)
-        # print(data[14])
-        # print(f"{data[13]}, {data[14]}, {data[15]}")
-
-        # print(f"{calibrate_x_axis(data[13])}, {calibrate_y_axis(data[14])}, {calibrate_z_axis(data[15])}")
-
-        get_x(data[13])
-
-
-
 
         data_rolling.append(normalize_data(data[41] * 14 / 512))
         data_rolling.pop(0)
