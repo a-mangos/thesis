@@ -9,21 +9,34 @@ from collections import deque
 from scipy.stats import circmean
 from scipy.spatial.transform import Rotation as R
 from ahrs.filters import AQUA
+from time import sleep
+from dataclasses import dataclass
+
+
+@dataclass
+class AccelerationData:
+    x: float
+    y: float
+    z: float
+
 
 def open_serial(ser):
     ser.baudrate = 115200
     ser.port = 'COM4'
     ser.open()
 
-def calculate_head_rotation(force_x: int, force_y: int) -> float:
-    calibrated_x = (force_x - 321) / 67
-    calibrated_y = (force_y - 323.5) / 66.5
+
+def calculate_head_rotation(acceleration_data: AccelerationData) -> float:
+    calibrated_x = (acceleration_data.x - 321) / 67
+    calibrated_y = (acceleration_data.y - 323.5) / 66.5
     return math.atan2(calibrated_x, calibrated_y) * 180 / math.pi - 46
 
-def calculate_head_flexion(force_x: int, force_z: int) -> float:
-    calibrated_x = (force_x - 321) / 67
-    calibrated_z = (force_z - 290) / 57
+
+def calculate_head_flexion(acceleration_data: AccelerationData) -> float:
+    calibrated_x = (acceleration_data.x - 321) / 67
+    calibrated_z = (acceleration_data.z - 290) / 57
     return math.atan2(calibrated_x, calibrated_z) * 180 / math.pi - 90
+
 
 def read_from_serial(ser):
     def align_to_header(ser):
@@ -106,12 +119,13 @@ if __name__ == "__main__":
     previous_position = np.identity(3)
     while True:
         data = read_from_serial(ser)
+        acceleration_data = AccelerationData(x=data[13], y=data[14], z=data[15])
 
-        roll = calculate_head_rotation(data[13], data[14])
+        roll = calculate_head_rotation(acceleration_data)
         roll_rolling.append(roll)
         roll_rolling.pop(0)
 
-        flexion = calculate_head_flexion(data[13], data[15])
+        flexion = calculate_head_flexion(acceleration_data)
         flexion_rolling.append(flexion)
         flexion_rolling.pop(0)
 
