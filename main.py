@@ -27,17 +27,27 @@ def open_serial(ser):
     ser.port = ('COM4')
     ser.open()
 
+# def calculate_head_rotation(acceleration_data: AccelerationData) -> float:
+#     calibrated_x = (acceleration_data.x - 321) / 67
+#     calibrated_y = (acceleration_data.y - 323.5) / 66.5
+#     return math.atan2(calibrated_x, calibrated_y) * 180 / math.pi - 46
+#
+#
+# def calculate_head_pitch(acceleration_data: AccelerationData) -> float:
+#     calibrated_x = (acceleration_data.x - 321) / 67
+#     calibrated_z = (acceleration_data.z - 290) / 57
+#     return math.atan2(calibrated_x, calibrated_z) * 180 / math.pi - 90
 
-def calculate_head_rotation(acceleration_data: AccelerationData) -> float:
-    calibrated_x = (acceleration_data.x - 321) / 67
-    calibrated_y = (acceleration_data.y - 323.5) / 66.5
-    return math.atan2(calibrated_x, calibrated_y) * 180 / math.pi - 46
-
-
-def calculate_head_flexion(acceleration_data: AccelerationData) -> float:
-    calibrated_x = (acceleration_data.x - 321) / 67
-    calibrated_z = (acceleration_data.z - 290) / 57
-    return math.atan2(calibrated_x, calibrated_z) * 180 / math.pi - 90
+# returns roll, pitch
+def calculate_head_angles(acceleration_data: AccelerationData):
+    # sign = 1 if acceleration_data.z_cal > 0 else -1
+    # miu = 0.001
+    sign = 1
+    miu = 0
+    return [math.atan2(acceleration_data.y_cal,
+                       sign * np.sqrt(acceleration_data.z_cal**2 + miu * acceleration_data.x_cal**2)),
+            math.atan2(-acceleration_data.x_cal,
+                       np.sqrt(acceleration_data.y_cal**2 + acceleration_data.z_cal**2))]
 
 
 def read_from_serial(ser):
@@ -70,20 +80,21 @@ def normalize_data(data):
 def calibrate_and_assign_acceleration_data(data_x, data_y, data_z):
     x = data_x.to_bytes(2, 'big', signed=True)
     x_raw = (x[0] << 8 | x[1]) >> 4
-    x_cal = x_raw / (1 << 11)
+    x_cal = (x_raw / (1 << 11))
 
     y = data_y.to_bytes(2, 'big', signed=True)
     y_raw = (y[0] << 8 | y[1]) >> 4
-    y_cal = y_raw / (1 << 11)
+    y_cal = (y_raw / (1 << 11))
 
     z = data_z.to_bytes(2, 'big', signed=True)
     z_raw = (z[0] << 8 | z[1]) >> 4
-    z_cal = z_raw / (1 << 11)
+    z_cal = (z_raw / (1 << 11))
 
     return AccelerationData(x_raw=x_raw, y_raw=y_raw, z_raw=z_raw, x_cal=x_cal, y_cal=y_cal, z_cal=z_cal)
 
 
 if __name__ == "__main__":
+    # Initialise serial
     ser = serial.Serial()
     open_serial(ser)
 
@@ -100,8 +111,13 @@ if __name__ == "__main__":
     fetal_head_r.compute_vertex_normals()
     fetal_head_r.paint_uniform_color([0.7, 0.7, 0.7])
 
+    gui = o3d.visualization.gui.Application.instance
+    gui.initialize()
+
     vis = o3d.visualization.Visualizer()
     vis.create_window(window_name="STL", left=1000, top=200, width=800, height=800)
+
+    gui.add_window(vis)
 
     # MERGE_CLOSE_VERTICES - INTERESTING FOR MERGING COLORS
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100, origin=fetal_head_r.get_center())
@@ -116,11 +132,6 @@ if __name__ == "__main__":
     #     for item in vertices_list:
     #         fp.write("%s\n" % item.index)
 
-    roll_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    flexion_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
-    data_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
     points = []
     with open(r"pin_locations.txt", "r") as f:
         for line in f:
@@ -130,65 +141,83 @@ if __name__ == "__main__":
     spheres = []
     for point in points:
         point_coord = vertices[point]
-        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=3, resolution=5)
+        print(point_coord[0][0], point_coord[0][1], point_coord[0][2])
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=6, resolution=5)
         sphere.translate(np.transpose(point_coord))
         spheres.append(sphere)
         vis.add_geometry(sphere)
+
+    # code to paint the head instead of making spheres
+    # vertex_points_to_colour = []
+    # for point in points:
+    #     point_coord = vertices[point]
+    #     vertex_points_to_colour.append(point)
+    #     for index in range(len(vertices) - 1):
+    #         if np.sqrt((vertices[index][0] - point_coord[0][0])**2 +
+    #                    (vertices[index][1] - point_coord[0][1])**2 +
+    #                    (vertices[index][2] - point_coord[0][2])**2) <= 6:
+    #             vertex_points_to_colour.append(index)
+    # vertex_colors = np.asarray(fetal_head_r.vertex_colors)
 
     view_control = vis.get_view_control()
     parameters = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-02-22-08-39-51.json")
     view_control.convert_from_pinhole_camera_parameters(parameters, True)
 
     previous_position = np.identity(3)
+
+    roll_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    pitch_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    data_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
     while True:
         data = read_from_serial(ser)
         acceleration_data = calibrate_and_assign_acceleration_data(data[13], data[14], data[15])
+        roll, pitch = calculate_head_angles(acceleration_data)
 
-        # roll = calculate_head_rotation(acceleration_data)
-        # roll_rolling.append(roll)
-        # roll_rolling.pop(0)
-        #
-        # flexion = calculate_head_flexion(acceleration_data)
-        # flexion_rolling.append(flexion)
-        # flexion_rolling.pop(0)
+        roll_rolling.append(roll)
+        roll_rolling.pop(0)
 
-        print(acceleration_data.x_cal, acceleration_data.y_cal, acceleration_data.z_cal)
+        pitch_rolling.append(pitch)
+        pitch_rolling.pop(0)
 
-        accel_aqua = AQUA(None, np.asarray((acceleration_data.x_cal, acceleration_data.y_cal, acceleration_data.z_cal)), None)
-        quaternion = accel_aqua.estimate(accel_aqua.acc, None)
+        # accel_aqua = AQUA(None, np.asarray((acceleration_data.x_cal, acceleration_data.y_cal, acceleration_data.z_cal)), None)
+        # quaternion = accel_aqua.estimate(accel_aqua.acc, None)
 
         # print(acceleration_data)
-        # roll = calculate_head_rotation(acceleration_data)
-        # roll_rolling.append(roll)
-        # roll_rolling.pop(0)
-        #
-        # flexion = calculate_head_flexion(acceleration_data)
-        # flexion_rolling.append(flexion)
-        # flexion_rolling.pop(0)
 
-        fetal_head_r.rotate(np.transpose(previous_position), fetal_head_r.get_center())
+        fetal_head_r.rotate(np.linalg.inv(previous_position), fetal_head_r.get_center())
         for sphere in spheres:
-            sphere.rotate(np.transpose(previous_position), fetal_head_r.get_center())
+            sphere.rotate(np.linalg.inv(previous_position), fetal_head_r.get_center())
 
         # new_position = fetal_head_r.get_rotation_matrix_from_xyz((0,
         #                                                           circmean(roll_rolling, high=360) * np.pi / 180,
         #                                                           0))
-        # new_position = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi/180,
-        #                                                           circmean(roll_rolling, high=360) * np.pi / 180,
-        #                                                           0))
 
-        new_position = fetal_head_r.get_rotation_matrix_from_quaternion(quaternion)
+        # new_position = fetal_head_r.get_rotation_matrix_from_xyz((mean(pitch_rolling),
+        #                                                           mean(roll_rolling),
+        #                                                           0))
+        new_position = fetal_head_r.get_rotation_matrix_from_xyz((0,
+                                                                  mean(roll_rolling),
+                                                                  0))
+        # new_position = fetal_head_r.get_rotation_matrix_from_quaternion(quaternion)
 
         for sphere in spheres:
             sphere.rotate(new_position, fetal_head_r.get_center())
         fetal_head_r.rotate(new_position, fetal_head_r.get_center())
         previous_position = new_position
 
-        data_rolling.append(normalize_data(data[41] * 14 / 512))
-        data_rolling.pop(0)
-
+        # data_rolling.append(normalize_data(data[41] * 14 / 512))
+        # data_rolling.pop(0)
         # for sphere in spheres:
         #     sphere.paint_uniform_color([mean(data_rolling), 1 - mean(data_rolling), 0])
+
+        for sphere in spheres:
+            sphere.paint_uniform_color([1, 0, 0])
+
+        # for vertex in vertex_points_to_colour:
+        #     vertex_colors[vertex] = [1, 0, 0]
+
+        # fetal_head_r.vertex_colors = o3d.utility.Vector3dVector(vertex_colors)
 
         vis.update_geometry(fetal_head_r)
         for sphere in spheres:
