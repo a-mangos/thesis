@@ -5,24 +5,26 @@ import math
 import copy
 from struct import unpack
 from statistics import mean
-from collections import deque
 from scipy.stats import circmean
-from scipy.spatial.transform import Rotation as R
-from ahrs.filters import AQUA
-from time import sleep
 from dataclasses import dataclass
+from ahrs.filters import AQUA
+from ahrs import Quaternion
 
 
 @dataclass
 class AccelerationData:
-    x: float
-    y: float
-    z: float
+    x_raw: int
+    y_raw: int
+    z_raw: int
+
+    x_cal: int
+    y_cal: int
+    z_cal: int
 
 
 def open_serial(ser):
     ser.baudrate = 115200
-    ser.port = 'COM4'
+    ser.port = ('COM4')
     ser.open()
 
 
@@ -58,11 +60,27 @@ def read_from_serial(ser):
     ser.flushInput()
     align_to_header(ser)
     NUM_READINGS = 64
-    return unpack(f">{NUM_READINGS}h", ser.read(NUM_READINGS * 2))
+    return unpack(f"<{NUM_READINGS}h", ser.read(NUM_READINGS * 2))
 
 
 def normalize_data(data):
     return (data - 0) / (4 - 0)
+
+
+def calibrate_and_assign_acceleration_data(data_x, data_y, data_z):
+    x = data_x.to_bytes(2, 'big', signed=True)
+    x_raw = (x[0] << 8 | x[1]) >> 4
+    x_cal = x_raw / (1 << 11)
+
+    y = data_y.to_bytes(2, 'big', signed=True)
+    y_raw = (y[0] << 8 | y[1]) >> 4
+    y_cal = y_raw / (1 << 11)
+
+    z = data_z.to_bytes(2, 'big', signed=True)
+    z_raw = (z[0] << 8 | z[1]) >> 4
+    z_cal = z_raw / (1 << 11)
+
+    return AccelerationData(x_raw=x_raw, y_raw=y_raw, z_raw=z_raw, x_cal=x_cal, y_cal=y_cal, z_cal=z_cal)
 
 
 if __name__ == "__main__":
@@ -87,14 +105,14 @@ if __name__ == "__main__":
 
     # MERGE_CLOSE_VERTICES - INTERESTING FOR MERGING COLORS
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100, origin=fetal_head_r.get_center())
-    # vis.add_geometry(coord_frame)
+    vis.add_geometry(coord_frame)
     vis.add_geometry(fetal_head_r)
 
     # vis.run()
     # vis.destroy_window()
     # vertices_list = vis.get_picked_points()
     #
-    # with open(r"picked_points.txt", "w") as fp:
+    # with open(r"pin_locations.txt", "w") as fp:
     #     for item in vertices_list:
     #         fp.write("%s\n" % item.index)
 
@@ -104,7 +122,7 @@ if __name__ == "__main__":
     data_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
     points = []
-    with open(r"picked_points.txt", "r") as f:
+    with open(r"pin_locations.txt", "r") as f:
         for line in f:
             points.append([int(e) for e in line.split()])
 
@@ -124,23 +142,43 @@ if __name__ == "__main__":
     previous_position = np.identity(3)
     while True:
         data = read_from_serial(ser)
-        acceleration_data = AccelerationData(x=data[13], y=data[14], z=data[15])
+        acceleration_data = calibrate_and_assign_acceleration_data(data[13], data[14], data[15])
 
-        roll = calculate_head_rotation(acceleration_data)
-        roll_rolling.append(roll)
-        roll_rolling.pop(0)
+        # roll = calculate_head_rotation(acceleration_data)
+        # roll_rolling.append(roll)
+        # roll_rolling.pop(0)
+        #
+        # flexion = calculate_head_flexion(acceleration_data)
+        # flexion_rolling.append(flexion)
+        # flexion_rolling.pop(0)
 
-        flexion = calculate_head_flexion(acceleration_data)
-        flexion_rolling.append(flexion)
-        flexion_rolling.pop(0)
+        print(acceleration_data.x_cal, acceleration_data.y_cal, acceleration_data.z_cal)
+
+        accel_aqua = AQUA(None, np.asarray((acceleration_data.x_cal, acceleration_data.y_cal, acceleration_data.z_cal)), None)
+        quaternion = accel_aqua.estimate(accel_aqua.acc, None)
+
+        # print(acceleration_data)
+        # roll = calculate_head_rotation(acceleration_data)
+        # roll_rolling.append(roll)
+        # roll_rolling.pop(0)
+        #
+        # flexion = calculate_head_flexion(acceleration_data)
+        # flexion_rolling.append(flexion)
+        # flexion_rolling.pop(0)
 
         fetal_head_r.rotate(np.transpose(previous_position), fetal_head_r.get_center())
         for sphere in spheres:
             sphere.rotate(np.transpose(previous_position), fetal_head_r.get_center())
 
-        new_position = fetal_head_r.get_rotation_matrix_from_xyz((0,
-                                                                  circmean(roll_rolling, high=360) * np.pi / 180,
-                                                                  0))
+        # new_position = fetal_head_r.get_rotation_matrix_from_xyz((0,
+        #                                                           circmean(roll_rolling, high=360) * np.pi / 180,
+        #                                                           0))
+        # new_position = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi/180,
+        #                                                           circmean(roll_rolling, high=360) * np.pi / 180,
+        #                                                           0))
+
+        new_position = fetal_head_r.get_rotation_matrix_from_quaternion(quaternion)
+
         for sphere in spheres:
             sphere.rotate(new_position, fetal_head_r.get_center())
         fetal_head_r.rotate(new_position, fetal_head_r.get_center())
@@ -149,8 +187,8 @@ if __name__ == "__main__":
         data_rolling.append(normalize_data(data[41] * 14 / 512))
         data_rolling.pop(0)
 
-        for sphere in spheres:
-            sphere.paint_uniform_color([mean(data_rolling), 1 - mean(data_rolling), 0])
+        # for sphere in spheres:
+        #     sphere.paint_uniform_color([mean(data_rolling), 1 - mean(data_rolling), 0])
 
         vis.update_geometry(fetal_head_r)
         for sphere in spheres:
