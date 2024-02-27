@@ -9,6 +9,8 @@ from collections import deque
 from scipy.stats import circmean
 from time import sleep
 from dataclasses import dataclass
+from ahrs.filters import AQUA
+from ahrs import Quaternion
 
 
 @dataclass
@@ -106,8 +108,6 @@ if __name__ == "__main__":
         for line in f:
             points.append([int(e) for e in line.split()])
 
-    print(len(points))
-
     vertices = np.asarray(fetal_head_r.vertices)
     spheres = []
     for point in points:
@@ -126,21 +126,28 @@ if __name__ == "__main__":
         data = read_from_serial(ser)
         acceleration_data = AccelerationData(x=data[13], y=data[14], z=data[15])
 
-        roll = calculate_head_rotation(acceleration_data)
-        roll_rolling.append(roll)
-        roll_rolling.pop(0)
+        accel_aqua = AQUA(None, np.asarray((acceleration_data.x, acceleration_data.y, acceleration_data.z)), None)
+        quaternion = accel_aqua.estimate(accel_aqua.acc, None)
 
-        flexion = calculate_head_flexion(acceleration_data)
-        flexion_rolling.append(flexion)
-        flexion_rolling.pop(0)
+        print(quaternion)
+        # roll = calculate_head_rotation(acceleration_data)
+        # roll_rolling.append(roll)
+        # roll_rolling.pop(0)
+        #
+        # flexion = calculate_head_flexion(acceleration_data)
+        # flexion_rolling.append(flexion)
+        # flexion_rolling.pop(0)
 
         fetal_head_r.rotate(np.transpose(previous_position), fetal_head_r.get_center())
         for sphere in spheres:
             sphere.rotate(np.transpose(previous_position), fetal_head_r.get_center())
 
-        new_position = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi/180,
-                                                                  circmean(roll_rolling, high=360) * np.pi / 180,
-                                                                  0))
+        # new_position = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi/180,
+        #                                                           circmean(roll_rolling, high=360) * np.pi / 180,
+        #                                                           0))
+
+        new_position = fetal_head_r.get_rotation_matrix_from_quaternion(quaternion)
+
         for sphere in spheres:
             sphere.rotate(new_position, fetal_head_r.get_center())
         fetal_head_r.rotate(new_position, fetal_head_r.get_center())
@@ -149,8 +156,8 @@ if __name__ == "__main__":
         data_rolling.append(normalize_data(data[41] * 14 / 512))
         data_rolling.pop(0)
 
-        for sphere in spheres:
-            sphere.paint_uniform_color([mean(data_rolling), 1 - mean(data_rolling), 0])
+        # for sphere in spheres:
+        #     sphere.paint_uniform_color([mean(data_rolling), 1 - mean(data_rolling), 0])
 
         vis.update_geometry(fetal_head_r)
         for sphere in spheres:
