@@ -138,7 +138,7 @@ if __name__ == "__main__":
         for sphere in spheres:
             sphere.rotate(np.transpose(previous_position), fetal_head_r.get_center())
 
-        new_position = fetal_head_r.get_rotation_matrix_from_xyz((0,
+        new_position = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi/180,
                                                                   circmean(roll_rolling, high=360) * np.pi / 180,
                                                                   0))
         for sphere in spheres:
