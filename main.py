@@ -11,6 +11,25 @@ from scipy.stats import circmean
 from dataclasses import dataclass
 
 
+@dataclass
+class AccelerationData:
+
+
+
+@dataclass
+class PressureSensorData:
+    back_sensors: list
+    right_sensors: list
+    left_sensors: list
+    front_sensors: list
+
+
+@dataclass
+class SerialData:
+    pressure_data = PressureSensorData()
+    acceleration_data = AccelerationData()
+
+
 class AppWindow:
     def __init__(self):
         self._app = o3d.visualization.gui.Application.instance
@@ -29,9 +48,19 @@ class AppWindow:
         self._coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100)
         self._fetal_head = self.load_fetal_head("whole_head_model.stl")
 
+        self._previous_transform = np.eye(4)
+        self._roll_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        self._pitch_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
         self._head_pin_locations = read_head_pin_locations_from_file()
-        # dictionary that maps the incoming data input to a pin location.
         vertices = np.asarray(self._fetal_head.vertices)
+
+        self._mat = rendering.MaterialRecord()
+        self._mat.shader = 'defaultLit'
+
+        self.set_window_layout()
+        self.setup_scenes()
+
         # map data to vertex at a given index. The index is in pin location
         # manual assignment prevents the use of two hash maps; firstly mapping pin locations to head sensor spots
         # then mapping head sensor spots to location on data array
@@ -46,12 +75,6 @@ class AppWindow:
         # but when I do it this time, assign each vertex value to the corresponding data point
         # because when I get the saved vertices, I won't know which one is which
         # but how do i save it each time
-
-        self._mat = rendering.MaterialRecord()
-        self._mat.shader = 'defaultLit'
-
-        self.set_window_layout()
-        self.setup_scenes()
 
     def load_fetal_head(self, path):
         fetal_head = o3d.io.read_triangle_mesh(path)
@@ -90,12 +113,12 @@ class AppWindow:
         self._coord_frame.translate((0, 0, 0), relative=False)
         self._fetal_head.translate(self._coord_frame.get_center(), relative=False)
 
-    def update_geometry(self):
+    def update_geometry(self, serial_data):
         self._widgetLeft.scene.clear_geometry()
         self._widgetRight.scene.clear_geometry()
 
-        self.update_pose()
-        self.update_colour()
+        self.update_pose(serial_data.acceleration_data)
+        self.update_colour(serial_data.pressure_data)
 
         self._widgetLeft.scene.add_geometry("__fetal_head__", self._fetal_head, self._mat)
         self._widgetLeft.scene.add_geometry("__coord_frame__", self._coord_frame, self._mat)
@@ -105,12 +128,25 @@ class AppWindow:
 
         self._window.post_redraw()
 
-    def update_pose(self):
+    def update_pose(self, acceleration_data):
+        self._fetal_head.transform(np.linalg.inv(self._previous_transform))
+
+        roll, pitch = calculate_head_angles(acceleration_data)
+
+        self._roll_rolling.append(roll)
+        self._roll_rolling.pop(0)
+
+        self._pitch_rolling.append(pitch)
+        self._pitch_rolling.pop(0)
+
         transform = np.eye(4)
-        # transform[:3, :3] = self._fetal_head.get_rotation_matrix_from_xyz((np.pi/180, 0, 0))
+        transform[:3, :3] = self._fetal_head.get_rotation_matrix_from_xyz((np.pi/180, 0, 0))
+
         self._fetal_head.transform(transform)
 
-    def update_colour(self):
+        self._previous_transform = transform
+
+    def update_colour(self, pressure_sensor_data):
         # vertices = np.asarray(fetal_head.vertices)
         # # code to paint the head instead of making spheres
         # vertex_points_to_colour = []
@@ -133,46 +169,20 @@ class AppWindow:
 
         self._fetal_head.vertex_colors = o3d.utility.Vector3dVector(vertex_colors)
 
-@dataclass
-class AccelerationData:
-    x_raw: int
-    y_raw: int
-    z_raw: int
-
-    x_cal: int
-    y_cal: int
-    z_cal: int
-
-
-@dataclass
-class PressureSensorData:
-    back_sensors: np.zeros((13,), dtype=int)
-    right_sensors: np.zeros((13,), dtype=int)
-    left_sensors: np.zeros((13,), dtype=int)
-    front_sensors: np.zeros((13,), dtype=int)
-
-
-@dataclass
-class SerialData:
-    pressure_data: PressureSensorData
-    acceleration_data: AccelerationData
-
 
 def open_serial(ser):
     ser.baudrate = 115200
-    ser.port = 'COM4'
+    ser.port = 'COM3'
     ser.open()
+    return SerialData
+
 
 # returns roll, pitch
 def calculate_head_angles(acceleration_data: AccelerationData):
-    # sign = 1 if acceleration_data.z_cal > 0 else -1
-    # miu = 0.001
-    sign = 1
-    miu = 0
-    return [math.atan2(acceleration_data.y_cal,
-                       sign * np.sqrt(acceleration_data.z_cal**2 + miu * acceleration_data.x_cal**2)),
-            math.atan2(-acceleration_data.x_cal,
-                       np.sqrt(acceleration_data.y_cal**2 + acceleration_data.z_cal**2))]
+    return [math.atan2(acceleration_data._y_cal,
+                       np.sqrt(acceleration_data._z_cal**2 + acceleration_data._x_cal**2)),
+            math.atan2(-acceleration_data._x_cal,
+                       np.sqrt(acceleration_data._y_cal**2 + acceleration_data._z_cal**2))]
 
 
 def read_from_serial(ser, data):
@@ -189,7 +199,8 @@ def read_from_serial(ser, data):
         z_raw = (z[0] << 8 | z[1]) >> 4
         z_cal = (z_raw / (1 << 11))
 
-        return AccelerationData(x_raw=x_raw, y_raw=y_raw, z_raw=z_raw, x_cal=x_cal, y_cal=y_cal, z_cal=z_cal)
+        return x_raw, x_cal, y_raw, y_cal, z_raw, z_cal
+
     def align_to_header(ser):
         header = [0xDE, 0xAD, 0xBE, 0xEF, 0xC0, 0x01, 0xCA, 0xFE]
         max_attempts = 1000
@@ -211,14 +222,13 @@ def read_from_serial(ser, data):
     num_readings = 64
     raw_data_array = unpack(f"<{num_readings}h", ser.read(num_readings * 2))
 
+    data.acceleration_data.set_values(calibrate_and_assign_acceleration_data(raw_data_array[13],
+                                                                             raw_data_array[14],
+                                                                             raw_data_array[15]))
     data.pressure_data.back_sensors = raw_data_array[0:12]
     data.pressure_data.right_sensors = raw_data_array[16:28]
     data.pressure_data.left_sensors = raw_data_array[32:44]
     data.pressure_data.front_sensors = raw_data_array[48:60]
-    data.acceleration_data = calibrate_and_assign_acceleration_data(raw_data_array[13],
-                                                                    raw_data_array[14],
-                                                                    raw_data_array[15])
-    return data
 
 def read_head_pin_locations_from_file():
     pin_locations = []
@@ -230,12 +240,11 @@ def read_head_pin_locations_from_file():
 def main():
     app_instance = AppWindow()
     # Initialise serial
-    # ser = serial.Serial()
-    # open_serial(ser)
-    # data = SerialData()
+    ser = serial.Serial()
+    data = open_serial(ser)
     while app_instance._app.run_one_tick():
-        # read_from_serial(ser, data)
-        app_instance.update_geometry()
+        read_from_serial(ser, data)
+        app_instance.update_geometry(data)
 
 if __name__ == "__main__":
     main()
