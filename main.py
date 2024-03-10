@@ -6,28 +6,36 @@ import serial
 import math
 import copy
 from struct import unpack
+from dataclasses import dataclass, field
 from statistics import mean
 from scipy.stats import circmean
-from dataclasses import dataclass
 
 
 @dataclass
 class AccelerationData:
+    x_raw: int = 0
+    y_raw: int = 0
+    z_raw: int = 0
 
+    x_cal: int = 0
+    y_cal: int = 0
+    z_cal: int = 0
+
+    def assign_variables(self, x_raw, y_raw, z_raw, x_cal, y_cal, z_cal):
+        self.x_raw = x_raw
+        self.y_raw = y_raw
+        self.z_raw = z_raw
+        self.x_cal = x_cal
+        self.y_cal = y_cal
+        self.z_cal = z_cal
 
 
 @dataclass
-class PressureSensorData:
-    back_sensors: list
-    right_sensors: list
-    left_sensors: list
-    front_sensors: list
-
-
-@dataclass
-class SerialData:
-    pressure_data = PressureSensorData()
-    acceleration_data = AccelerationData()
+class PressureData:
+    back_sensors: tuple = field(default_factory=tuple)
+    left_sensors: tuple = field(default_factory=tuple)
+    right_sensors: tuple = field(default_factory=tuple)
+    front_sensors: tuple = field(default_factory=tuple)
 
 
 class AppWindow:
@@ -117,8 +125,8 @@ class AppWindow:
         self._widgetLeft.scene.clear_geometry()
         self._widgetRight.scene.clear_geometry()
 
-        self.update_pose(serial_data.acceleration_data)
-        self.update_colour(serial_data.pressure_data)
+        self.update_pose(serial_data[0])
+        self.update_colour(serial_data[1])
 
         self._widgetLeft.scene.add_geometry("__fetal_head__", self._fetal_head, self._mat)
         self._widgetLeft.scene.add_geometry("__coord_frame__", self._coord_frame, self._mat)
@@ -170,65 +178,13 @@ class AppWindow:
         self._fetal_head.vertex_colors = o3d.utility.Vector3dVector(vertex_colors)
 
 
-def open_serial(ser):
-    ser.baudrate = 115200
-    ser.port = 'COM3'
-    ser.open()
-    return SerialData
-
-
 # returns roll, pitch
 def calculate_head_angles(acceleration_data: AccelerationData):
-    return [math.atan2(acceleration_data._y_cal,
-                       np.sqrt(acceleration_data._z_cal**2 + acceleration_data._x_cal**2)),
-            math.atan2(-acceleration_data._x_cal,
-                       np.sqrt(acceleration_data._y_cal**2 + acceleration_data._z_cal**2))]
+    return [math.atan2(acceleration_data.y_cal,
+                       np.sqrt(acceleration_data.z_cal**2 + acceleration_data.x_cal**2)),
+            math.atan2(-acceleration_data.x_cal,
+                       np.sqrt(acceleration_data.y_cal**2 + acceleration_data.z_cal**2))]
 
-
-def read_from_serial(ser, data):
-    def calibrate_and_assign_acceleration_data(data_x, data_y, data_z):
-        x = data_x.to_bytes(2, 'big', signed=True)
-        x_raw = (x[0] << 8 | x[1]) >> 4
-        x_cal = (x_raw / (1 << 11))
-
-        y = data_y.to_bytes(2, 'big', signed=True)
-        y_raw = (y[0] << 8 | y[1]) >> 4
-        y_cal = (y_raw / (1 << 11))
-
-        z = data_z.to_bytes(2, 'big', signed=True)
-        z_raw = (z[0] << 8 | z[1]) >> 4
-        z_cal = (z_raw / (1 << 11))
-
-        return x_raw, x_cal, y_raw, y_cal, z_raw, z_cal
-
-    def align_to_header(ser):
-        header = [0xDE, 0xAD, 0xBE, 0xEF, 0xC0, 0x01, 0xCA, 0xFE]
-        max_attempts = 1000
-        attempt_counter = 0
-        while True:
-            found = True
-            for byte in header:
-                if byte != int.from_bytes(ser.read(), 'big'):
-                    if attempt_counter > max_attempts:
-                        raise ValueError("Could not find the header")
-                    attempt_counter += 1
-                    found = False
-                    break
-            if found:
-                return
-
-    ser.flushInput()
-    align_to_header(ser)
-    num_readings = 64
-    raw_data_array = unpack(f"<{num_readings}h", ser.read(num_readings * 2))
-
-    data.acceleration_data.set_values(calibrate_and_assign_acceleration_data(raw_data_array[13],
-                                                                             raw_data_array[14],
-                                                                             raw_data_array[15]))
-    data.pressure_data.back_sensors = raw_data_array[0:12]
-    data.pressure_data.right_sensors = raw_data_array[16:28]
-    data.pressure_data.left_sensors = raw_data_array[32:44]
-    data.pressure_data.front_sensors = raw_data_array[48:60]
 
 def read_head_pin_locations_from_file():
     pin_locations = []
@@ -237,14 +193,70 @@ def read_head_pin_locations_from_file():
             pin_locations.append([int(e) for e in line.split()])
     return pin_locations
 
+
+class SerialData:
+    def __init__(self):
+        self._ser = serial.Serial()
+        self._ser.baudrate = 115200
+        self._ser.port = 'COM4'
+        self._ser.open()
+
+        self._acceleration_data = AccelerationData()
+        self._pressure_data = PressureData()
+
+    def read_from_serial(self):
+        def calibrate_and_assign_acceleration_data(data_x, data_y, data_z):
+            x = data_x.to_bytes(2, 'big', signed=True)
+            x_raw = (x[0] << 8 | x[1]) >> 4
+            x_cal = (x_raw / (1 << 11))
+
+            y = data_y.to_bytes(2, 'big', signed=True)
+            y_raw = (y[0] << 8 | y[1]) >> 4
+            y_cal = (y_raw / (1 << 11))
+
+            z = data_z.to_bytes(2, 'big', signed=True)
+            z_raw = (z[0] << 8 | z[1]) >> 4
+            z_cal = (z_raw / (1 << 11))
+
+            self._acceleration_data.assign_variables(x_raw, y_raw, z_raw, x_cal, y_cal, z_cal)
+
+        def align_to_header(ser):
+            header = [0xDE, 0xAD, 0xBE, 0xEF, 0xC0, 0x01, 0xCA, 0xFE]
+            max_attempts = 1000
+            attempt_counter = 0
+            while True:
+                found = True
+                for byte in header:
+                    if byte != int.from_bytes(ser.read(), 'big'):
+                        if attempt_counter > max_attempts:
+                            raise ValueError("Could not find the header")
+                        attempt_counter += 1
+                        found = False
+                        break
+                if found:
+                    return
+
+        self._ser.flushInput()
+        align_to_header(self._ser)
+        num_readings = 64
+        raw_data_array = unpack(f"<{num_readings}h", self._ser.read(num_readings * 2))
+
+        calibrate_and_assign_acceleration_data(raw_data_array[13], raw_data_array[14], raw_data_array[15])
+        self._pressure_data.back_sensors = raw_data_array[0:12]
+        self._pressure_data.right_sensors = raw_data_array[16:28]
+        self._pressure_data.left_sensors = raw_data_array[32:44]
+        self._pressure_data.front_sensors = raw_data_array[48:60]
+
+        return self._acceleration_data, self._pressure_data
+
+
 def main():
+    # Initialise gui display and serial instance
+    serial_instance = SerialData()
     app_instance = AppWindow()
-    # Initialise serial
-    ser = serial.Serial()
-    data = open_serial(ser)
+
     while app_instance._app.run_one_tick():
-        read_from_serial(ser, data)
-        app_instance.update_geometry(data)
+        app_instance.update_geometry(serial_instance.read_from_serial())
 
 if __name__ == "__main__":
     main()
