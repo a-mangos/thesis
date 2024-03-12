@@ -9,6 +9,7 @@ from struct import unpack
 from dataclasses import dataclass, field
 from statistics import mean
 from scipy.stats import circmean
+from ahrs.filters import AQUA
 
 
 @dataclass
@@ -138,17 +139,25 @@ class AppWindow:
 
     def update_pose(self, acceleration_data):
         self._fetal_head.transform(np.linalg.inv(self._previous_transform))
-
-        roll, pitch = calculate_head_angles(acceleration_data)
-
-        self._roll_rolling.append(roll)
-        self._roll_rolling.pop(0)
-
-        self._pitch_rolling.append(pitch)
-        self._pitch_rolling.pop(0)
+        # roll, pitch = calculate_head_angles(acceleration_data)
+        #
+        # self._roll_rolling.append(roll)
+        # self._roll_rolling.pop(0)
+        #
+        # self._pitch_rolling.append(pitch)
+        # self._pitch_rolling.pop(0)
+        #
+        # transform = np.eye(4)
+        # transform[:3, :3] = self._fetal_head.get_rotation_matrix_from_xyz((0,
+        #                                                                    circmean(self._roll_rolling, high=2) * np.pi/180,
+        #                                                                    0))
+        accel_aqua = AQUA(None,
+                          np.asarray((acceleration_data.x_cal, acceleration_data.y_cal, acceleration_data.z_cal)),
+                          None)
+        quaternion = accel_aqua.estimate(accel_aqua.acc, None)
 
         transform = np.eye(4)
-        transform[:3, :3] = self._fetal_head.get_rotation_matrix_from_xyz((np.pi/180, 0, 0))
+        transform[:3, :3] = self._fetal_head.get_rotation_matrix_from_quaternion(quaternion)
 
         self._fetal_head.transform(transform)
 
@@ -180,8 +189,7 @@ class AppWindow:
 
 # returns roll, pitch
 def calculate_head_angles(acceleration_data: AccelerationData):
-    return [math.atan2(acceleration_data.y_cal,
-                       np.sqrt(acceleration_data.z_cal**2 + acceleration_data.x_cal**2)),
+    return [math.atan2(acceleration_data.y_cal, acceleration_data.z_cal),
             math.atan2(-acceleration_data.x_cal,
                        np.sqrt(acceleration_data.y_cal**2 + acceleration_data.z_cal**2))]
 
@@ -198,7 +206,7 @@ class SerialData:
     def __init__(self):
         self._ser = serial.Serial()
         self._ser.baudrate = 115200
-        self._ser.port = 'COM4'
+        self._ser.port = 'COM3'
         self._ser.open()
 
         self._acceleration_data = AccelerationData()
@@ -206,17 +214,18 @@ class SerialData:
 
     def read_from_serial(self):
         def calibrate_and_assign_acceleration_data(data_x, data_y, data_z):
+            # calibrated values need to be in m/s^2 for algorithm
             x = data_x.to_bytes(2, 'big', signed=True)
             x_raw = (x[0] << 8 | x[1]) >> 4
-            x_cal = (x_raw / (1 << 11))
+            x_cal = ((x_raw / (1 << 11)) - 1) * 9.81
 
             y = data_y.to_bytes(2, 'big', signed=True)
             y_raw = (y[0] << 8 | y[1]) >> 4
-            y_cal = (y_raw / (1 << 11))
+            y_cal = ((y_raw / (1 << 11)) - 1) * 9.81
 
             z = data_z.to_bytes(2, 'big', signed=True)
             z_raw = (z[0] << 8 | z[1]) >> 4
-            z_cal = (z_raw / (1 << 11))
+            z_cal = ((z_raw / (1 << 11)) - 1) * 9.81
 
             self._acceleration_data.assign_variables(x_raw, y_raw, z_raw, x_cal, y_cal, z_cal)
 
@@ -260,12 +269,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # previous_position = np.identity(3)
-    #
-    # roll_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    # pitch_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    # data_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     #
     # while True:
     #     data = read_from_serial(ser)
