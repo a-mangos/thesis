@@ -4,14 +4,9 @@ import serial
 import math
 import copy
 from struct import unpack
-from statistics import mean
-from collections import deque
 from scipy.stats import circmean
-from time import sleep
 from dataclasses import dataclass
-from ahrs.filters import AQUA
-from ahrs import Quaternion
-
+from statistics import mean
 
 @dataclass
 class AccelerationData:
@@ -22,7 +17,7 @@ class AccelerationData:
 
 def open_serial(ser):
     ser.baudrate = 115200
-    ser.port = 'COM3'
+    ser.port = 'COM4'
     ser.open()
 
 
@@ -82,17 +77,22 @@ if __name__ == "__main__":
     fetal_head_r.compute_vertex_normals()
     fetal_head_r.paint_uniform_color([0.7, 0.7, 0.7])
 
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name="STL", left=1000, top=200, width=800, height=800)
+    vis_one = o3d.visualization.Visualizer()
+    vis_one.create_window(window_name="Left", left=1000, top=200, width=800, height=800)
 
-    # MERGE_CLOSE_VERTICES - INTERESTING FOR MERGING COLORS
+    vis_two = o3d.visualization.Visualizer()
+    vis_two.create_window(window_name="Right", left=1000, top=200, width=800, height=800)
+
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100, origin=fetal_head_r.get_center())
-    vis.add_geometry(coord_frame)
-    vis.add_geometry(fetal_head_r)
+    vis_one.add_geometry(coord_frame)
+    vis_one.add_geometry(fetal_head_r)
 
-    # vis.run()
-    # vis.destroy_window()
-    # vertices_list = vis.get_picked_points()
+    vis_two.add_geometry(coord_frame)
+    vis_two.add_geometry(fetal_head_r)
+
+    # vis_one.run()
+    # vis_one.destroy_window()
+    # vertices_list = vis_one.get_picked_points()
     #
     # with open(r"pin_locations.txt", "w") as fp:
     #     for item in vertices_list:
@@ -115,52 +115,55 @@ if __name__ == "__main__":
         sphere = o3d.geometry.TriangleMesh.create_sphere(radius=3, resolution=5)
         sphere.translate(np.transpose(point_coord))
         spheres.append(sphere)
-        vis.add_geometry(sphere)
+        vis_one.add_geometry(sphere)
+        vis_two.add_geometry(sphere)
 
-    view_control = vis.get_view_control()
-    parameters = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-02-22-08-39-51.json")
-    view_control.convert_from_pinhole_camera_parameters(parameters, True)
+    view_parameters_one = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-02-22-08-39-51.json")
+    view_parameters_two = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-03-30-14-55-30.json")
+
+    view_control_one = vis_one.get_view_control()
+    view_control_one.convert_from_pinhole_camera_parameters(view_parameters_one, True)
+
+    view_control_two = vis_two.get_view_control()
+    view_control_two.convert_from_pinhole_camera_parameters(view_parameters_two, True)
 
     previous_position = np.identity(3)
     while True:
         data = read_from_serial(ser)
         acceleration_data = AccelerationData(x=data[13], y=data[14], z=data[15])
 
-        accel_aqua = AQUA(None, np.asarray((acceleration_data.x, acceleration_data.y, acceleration_data.z)), None)
-        quaternion = accel_aqua.estimate(accel_aqua.acc, None)
+        roll = calculate_head_rotation(acceleration_data)
+        roll_rolling.append(roll)
+        roll_rolling.pop(0)
 
-        print(quaternion)
-        # roll = calculate_head_rotation(acceleration_data)
-        # roll_rolling.append(roll)
-        # roll_rolling.pop(0)
-        #
-        # flexion = calculate_head_flexion(acceleration_data)
-        # flexion_rolling.append(flexion)
-        # flexion_rolling.pop(0)
+        flexion = calculate_head_flexion(acceleration_data)
+        flexion_rolling.append(flexion)
+        flexion_rolling.pop(0)
 
         fetal_head_r.rotate(np.transpose(previous_position), fetal_head_r.get_center())
         for sphere in spheres:
             sphere.rotate(np.transpose(previous_position), fetal_head_r.get_center())
 
-        # new_position = fetal_head_r.get_rotation_matrix_from_xyz((circmean(flexion_rolling, high=360) * np.pi/180,
-        #                                                           circmean(roll_rolling, high=360) * np.pi / 180,
-        #                                                           0))
-
-        new_position = fetal_head_r.get_rotation_matrix_from_quaternion(quaternion)
+        new_position = fetal_head_r.get_rotation_matrix_from_xyz((0,
+                                                                  circmean(roll_rolling, high=360) * np.pi / 180,
+                                                                  0))
 
         for sphere in spheres:
             sphere.rotate(new_position, fetal_head_r.get_center())
         fetal_head_r.rotate(new_position, fetal_head_r.get_center())
         previous_position = new_position
 
-        data_rolling.append(normalize_data(data[41] * 14 / 512))
-        data_rolling.pop(0)
-
-        # for sphere in spheres:
-        #     sphere.paint_uniform_color([mean(data_rolling), 1 - mean(data_rolling), 0])
-
-        vis.update_geometry(fetal_head_r)
         for sphere in spheres:
-            vis.update_geometry(sphere)
-        vis.update_renderer()
-        vis.poll_events()
+            sphere.paint_uniform_color([mean(data_rolling), 1 - mean(data_rolling), 0])
+
+        vis_one.update_geometry(fetal_head_r)
+        vis_two.update_geometry(fetal_head_r)
+
+        for sphere in spheres:
+            vis_one.update_geometry(sphere)
+            vis_two.update_geometry(sphere)
+
+        vis_one.update_renderer()
+        vis_one.poll_events()
+        vis_two.update_renderer()
+        vis_two.poll_events()
