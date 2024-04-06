@@ -1,12 +1,16 @@
 import open3d as o3d
 import numpy as np
 import serial
+import serial.tools.list_ports
 import math
 import copy
 from struct import unpack
 from scipy.stats import circmean
 from dataclasses import dataclass
 from statistics import mean
+
+
+
 
 @dataclass
 class AccelerationData:
@@ -17,7 +21,7 @@ class AccelerationData:
 
 def open_serial(ser):
     ser.baudrate = 115200
-    ser.port = 'COM4'
+    ser.port = list(serial.tools.list_ports.comports())[0].device
     ser.open()
 
 
@@ -133,14 +137,14 @@ if __name__ == "__main__":
         vis_one.add_geometry(sphere)
         vis_two.add_geometry(sphere)
 
-    view_parameters_one = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-02-22-08-39-51.json")
-    view_parameters_two = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-03-30-14-55-30.json")
+    #view_parameters_one = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-02-22-08-39-51.json")
+    #view_parameters_two = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-03-30-14-55-30.json")
 
-    view_control_one = vis_one.get_view_control()
-    view_control_one.convert_from_pinhole_camera_parameters(view_parameters_one, True)
+    #view_control_one = vis_one.get_view_control()
+    #view_control_one.convert_from_pinhole_camera_parameters(view_parameters_one, True)
 
-    view_control_two = vis_two.get_view_control()
-    view_control_two.convert_from_pinhole_camera_parameters(view_parameters_two, True)
+    #view_control_two = vis_two.get_view_control()
+    #view_control_two.convert_from_pinhole_camera_parameters(view_parameters_two, True)
 
     previous_position = np.identity(3)
     while True:
