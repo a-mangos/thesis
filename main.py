@@ -90,11 +90,25 @@ if __name__ == "__main__":
     vis_two.add_geometry(coord_frame)
     vis_two.add_geometry(fetal_head_r)
 
-    # vis_one.run()
-    # vis_one.destroy_window()
-    # vertices_list = vis_one.get_picked_points()
+    # vis = o3d.visualization.VisualizerWithVertexSelection()
+    # vis.create_window(window_name="STL", left=1000, top=200, width=800, height=800)
+    # vis.add_geometry(fetal_head_r)
+
+    points = []
+    with open(r"pin_locations.txt", "r") as f:
+        for line in f:
+            points.append([int(e) for e in line.split()])
+
+    # colors = np.asarray(fetal_head_r.vertex_colors)
+    # for point in points:
+    #     colors[point] = [1, 0, 0]
+    # fetal_head_r.vertex_colors = o3d.utility.Vector3dVector(colors)
     #
-    # with open(r"pin_locations.txt", "w") as fp:
+    # vis.run()
+    # vis.destroy_window()
+    #
+    # vertices_list = vis.get_picked_points()
+    # with open(r"pin_locations_offset.txt", "w") as fp:
     #     for item in vertices_list:
     #         fp.write("%s\n" % item.index)
 
@@ -107,6 +121,7 @@ if __name__ == "__main__":
     with open(r"pin_locations.txt", "r") as f:
         for line in f:
             points.append([int(e) for e in line.split()])
+
 
     vertices = np.asarray(fetal_head_r.vertices)
     spheres = []
@@ -131,6 +146,8 @@ if __name__ == "__main__":
     while True:
         data = read_from_serial(ser)
         acceleration_data = AccelerationData(x=data[13], y=data[14], z=data[15])
+
+        print(data)
 
         roll = calculate_head_rotation(acceleration_data)
         roll_rolling.append(roll)
