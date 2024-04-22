@@ -169,7 +169,7 @@ if __name__ == "__main__":
     view_control_one = vis_one.get_view_control()
     view_control_one.convert_from_pinhole_camera_parameters(view_parameters_one, True)
 
-    view_control_two = vis_one.get_view_control()
+    view_control_two = vis_two.get_view_control()
     view_control_two.convert_from_pinhole_camera_parameters(view_parameters_two, True)
 
     previous_position = np.identity(3)
