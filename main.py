@@ -4,10 +4,11 @@ import serial
 import serial.tools.list_ports
 import math
 import copy
+import pickle
 from struct import unpack
 from scipy.stats import circmean
 from dataclasses import dataclass
-from statistics import mean
+import time
 
 
 
@@ -21,14 +22,15 @@ class AccelerationData:
 
 def open_serial(ser):
     ser.baudrate = 115200
-    ser.port = list(serial.tools.list_ports.comports())[0].device
+    # ser.port = list(serial.tools.list_ports.comports())[0].device
+    ser.port = 'COM4'
     ser.open()
 
 
 def calculate_head_rotation(acceleration_data: AccelerationData) -> float:
     calibrated_x = (acceleration_data.x - 321) / 67
     calibrated_y = (acceleration_data.y - 323.5) / 66.5
-    return math.atan2(calibrated_x, calibrated_y) * 180 / math.pi - 46
+    return -1 * (math.atan2(calibrated_x, calibrated_y) * 180 / math.pi - 46)
 
 
 def calculate_head_flexion(acceleration_data: AccelerationData) -> float:
@@ -59,11 +61,6 @@ def read_from_serial(ser):
     NUM_READINGS = 64
     return unpack(f">{NUM_READINGS}h", ser.read(NUM_READINGS * 2))
 
-
-def normalize_data(data):
-    return (data - 0) / (4 - 0)
-
-
 if __name__ == "__main__":
     ser = serial.Serial()
     open_serial(ser)
@@ -81,61 +78,104 @@ if __name__ == "__main__":
     fetal_head_r.compute_vertex_normals()
     fetal_head_r.paint_uniform_color([0.7, 0.7, 0.7])
 
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name="Left", left=1000, top=200, width=800, height=800)
+    with open('pin_to_vertices_mapping.pickle', 'rb') as handle:
+        pin_to_vertices_mapping = pickle.load(handle)
+
+    vertex_colors = np.asarray(fetal_head_r.vertex_colors)
+
+    vis_one = o3d.visualization.Visualizer()
+    vis_one.create_window(window_name="Left", left=1000, top=200, width=800, height=800)
+
+    vis_two = o3d.visualization.Visualizer()
+    vis_two.create_window(window_name="Right", left=1000, top=200, width=800, height=800)
 
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100, origin=fetal_head_r.get_center())
-    vis.add_geometry(coord_frame)
-    vis.add_geometry(fetal_head_r)
+    vis_one.add_geometry(coord_frame)
+    vis_one.add_geometry(fetal_head_r)
 
-    # vis = o3d.visualization.VisualizerWithVertexSelection()
-    # vis.create_window(window_name="STL", left=1000, top=200, width=800, height=800)
-    # vis.add_geometry(fetal_head_r)
-
-    points = []
-    with open(r"pin_locations.txt", "r") as f:
-        for line in f:
-            points.append([int(e) for e in line.split()])
+    vis_two.add_geometry(coord_frame)
+    vis_two.add_geometry(fetal_head_r)
 
     # colors = np.asarray(fetal_head_r.vertex_colors)
     # for point in points:
     #     colors[point] = [1, 0, 0]
     # fetal_head_r.vertex_colors = o3d.utility.Vector3dVector(colors)
     #
-    # vis.run()
-    # vis.destroy_window()
-    #
-    # vertices_list = vis.get_picked_points()
-    # with open(r"pin_locations_offset.txt", "w") as fp:
-    #     for item in vertices_list:
-    #         fp.write("%s\n" % item.index)
+    # vis_one.run()
+    # vis_one.destroy_window()
 
     roll_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     flexion_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
     data_rolling = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-    points = []
-    with open(r"pin_locations.txt", "r") as f:
-        for line in f:
-            points.append([int(e) for e in line.split()])
+    data_to_pin = {
+        'B0': 0,
+        'B1': 1,
+        'B2': 2,
+        'B3': 3,
+        'B4': 4,
+        'B5': 5,
+        'B6': 6,
+        'B7': 7,
+        'B8': 8,
+        'B9': 9,
+        'B10': 10,
+        'B11': 11,
+        'B12': 12,
+        'R0': 16,
+        'R1': 17,
+        'R2': 18,
+        'R3': 19,
+        'R4': 20,
+        'R5': 21,
+        'R6': 22,
+        'R7': 23,
+        'R8': 24,
+        'R9': 25,
+        'R10': 26,
+        'R11': 27,
+        'R12': 28,
+        'L0': 32,
+        'L1': 33,
+        'L2': 34,
+        'L3': 35,
+        'L4': 36,
+        'L5': 37,
+        'L6': 38,
+        'L7': 39,
+        'L8': 40,
+        'L9': 41,
+        'L10': 42,
+        'L11': 43,
+        'L12': 44,
+        'F0': 48,
+        'F1': 49,
+        'F2': 50,
+        'F3': 51,
+        'F4': 52,
+        'F5': 53,
+        'F6': 54,
+        'F7': 55,
+        'F8': 56,
+        'F9': 57,
+        'F10': 58,
+        'F11': 59,
+        'F12': 60,
+    }
 
+    view_parameters_one = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-02-22-08-39-51.json")
+    view_parameters_two = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-04-22-21-46-33.json")
 
-    vertices = np.asarray(fetal_head_r.vertices)
-    spheres = []
-    for point in points:
-        point_coord = vertices[point]
-        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=3, resolution=5)
-        sphere.translate(np.transpose(point_coord))
-        spheres.append(sphere)
-        vis.add_geometry(sphere)
+    view_control_one = vis_one.get_view_control()
+    view_control_one.convert_from_pinhole_camera_parameters(view_parameters_one, True)
 
-    view_parameters = o3d.io.read_pinhole_camera_parameters("ScreenCamera_2024-02-22-08-39-51.json")
-
-    view_control = vis.get_view_control()
-    view_control.convert_from_pinhole_camera_parameters(view_parameters, True)
+    view_control_two = vis_one.get_view_control()
+    view_control_two.convert_from_pinhole_camera_parameters(view_parameters_two, True)
 
     previous_position = np.identity(3)
+
+    pressure_readings = {}
+    last_pressure_decay_time = time.time()
     while True:
         data = read_from_serial(ser)
         acceleration_data = AccelerationData(x=data[13], y=data[14], z=data[15])
@@ -149,25 +189,39 @@ if __name__ == "__main__":
         flexion_rolling.pop(0)
 
         fetal_head_r.rotate(np.transpose(previous_position), fetal_head_r.get_center())
-#        for sphere in spheres:
-#            sphere.rotate(np.transpose(previous_position), fetal_head_r.get_center())
 
         new_position = fetal_head_r.get_rotation_matrix_from_xyz((0,
                                                                   circmean(roll_rolling, high=360) * np.pi / 180,
                                                                   0))
 
-#        for sphere in spheres:
-#            sphere.rotate(new_position, fetal_head_r.get_center())
         fetal_head_r.rotate(new_position, fetal_head_r.get_center())
         previous_position = new_position
 
-#        for sphere in spheres:
-#            sphere.paint_uniform_color([mean(data_rolling), 1 - mean(data_rolling), 0])
+        if (time.time() - last_pressure_decay_time) > 0.1:
+            for pin in pressure_readings.keys():
+                pressure_readings[pin] = max(pressure_readings[pin] * 0.7,  1)
+                last_pressure_decay_time = time.time()
 
-        vis.update_geometry(fetal_head_r)
+        for pin, vertices in pin_to_vertices_mapping.items():
+            new_reading = data[data_to_pin.get(pin)]
+            if new_reading < 50:
+                new_reading = 1
+            if new_reading > 300:
+                new_reading = 300
+            if pin not in pressure_readings or new_reading > pressure_readings[pin]:
+                pressure_readings[pin] = max(pressure_readings.get(pin, 1), new_reading)
+                # if pressure_readings.get(pin, 1) < new_reading:
+                #     pressure_readings[pin] = new_reading if new_reading > 30 else 1
 
-#        for sphere in spheres:
-#            vis.update_geometry(sphere)
+            G_B_channels = 0.7/pressure_readings.get(pin, 1)
+            colour = [0.7, G_B_channels, G_B_channels]
+            for vertex in vertices:
+                vertex_colors[vertex] = colour
 
-        vis.update_renderer()
-        vis.poll_events()
+        vis_one.update_geometry(fetal_head_r)
+        vis_two.update_geometry(fetal_head_r)
+
+        vis_one.update_renderer()
+        vis_one.poll_events()
+        vis_two.update_renderer()
+        vis_two.poll_events()
