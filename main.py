@@ -92,7 +92,7 @@ class AppWindow:
         self._window.add_child(self._widgetRight)
 
         self._coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100)
-        self._fetal_head = self.load_fetal_head("whole_head_model.stl")
+        self._fetal_head = self.load_fetal_head("whole_head_model.STL")
 
         self._previous_position = np.identity(3)
         self._roll_rolling = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -209,8 +209,8 @@ class SerialData:
     def __init__(self):
         self._ser = serial.Serial()
         self._ser.baudrate = 115200
-        # self._ser.port = list(serial.tools.list_ports.comports())[0].device
-        self._ser.port = 'COM3'
+        self._ser.port = list(serial.tools.list_ports.comports())[0].device
+        # self._ser.port = 'COM3'
         self._ser.open()
 
     def read_from_serial(self):
