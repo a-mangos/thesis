@@ -134,4 +134,5 @@ void loop()
   backwardButton.process(now);
 
   myservo.writeMicroseconds(microseconds);
+  send_over_serial(microseconds);
 }

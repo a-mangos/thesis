@@ -91,6 +91,10 @@ class AppWindow:
         self._widgetRight.scene = rendering.Open3DScene(self._window.renderer)
         self._window.add_child(self._widgetRight)
 
+        self._progressBar = gui.ProgressBar()
+        self._progressBar.value = 0
+        self._window.add_child(self._progressBar)
+
         self._coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100)
         self._fetal_head = self.load_fetal_head("whole_head_model.STL")
 
@@ -134,8 +138,10 @@ class AppWindow:
 
     def set_window_layout(self):
         r = self._window.content_rect
-        self._widgetLeft.frame = gui.Rect(r.x, r.y, r.width / 2, r.height)
-        self._widgetRight.frame = gui.Rect(r.x + r.width / 2 + 1, r.y, r.width / 2, r.height)
+        scale_factor = 15/16
+        self._widgetLeft.frame = gui.Rect(r.x, r.y, r.width / 2, r.height * scale_factor)
+        self._widgetRight.frame = gui.Rect(r.x + r.width / 2 + 1, r.y, r.width / 2, r.height * scale_factor)
+        self._progressBar.frame = gui.Rect(r.x, r.y + r.height * scale_factor, r.width, r.height * (1 - scale_factor))
 
     def initial_transform(self):
         # Initial offset from original model to line up the head with axes of render
@@ -151,9 +157,9 @@ class AppWindow:
         self._widgetRight.scene.clear_geometry()
 
         acceleration_data = AccelerationData(x=serial_data[13], y=serial_data[14], z=serial_data[15])
-
         self.update_pose(acceleration_data)
         self.update_colour(serial_data)
+        self._progressBar.value = (serial_data[64] - 1000)/1000
 
         self._widgetLeft.scene.add_geometry("__fetal_head__", self._fetal_head, self._mat)
         self._widgetLeft.scene.add_geometry("__coord_frame__", self._coord_frame, self._mat)
@@ -175,6 +181,7 @@ class AppWindow:
 
         self._fetal_head.rotate(new_position, self._fetal_head.get_center())
         self._previous_position = new_position
+        self._progressBar.value += 0.001
 
     def update_colour(self, serial_data):
         if (time.time() - self._last_pressure_decay_time) > 0.1:
@@ -209,8 +216,8 @@ class SerialData:
     def __init__(self):
         self._ser = serial.Serial()
         self._ser.baudrate = 115200
-        self._ser.port = list(serial.tools.list_ports.comports())[0].device
-        # self._ser.port = 'COM3'
+        # self._ser.port = list(serial.tools.list_ports.comports())[0].device
+        self._ser.port = 'COM3'
         self._ser.open()
 
     def read_from_serial(self):
@@ -232,7 +239,7 @@ class SerialData:
 
         self._ser.reset_input_buffer()
         align_to_header(self._ser)
-        num_readings = 64
+        num_readings = 65
         return unpack(f">{num_readings}h", self._ser.read(num_readings * 2))
 
 
