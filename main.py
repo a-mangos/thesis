@@ -10,6 +10,8 @@ import math
 import pickle
 from struct import unpack
 import time
+import RPi.GPIO as GPIO
+import os
 
 @dataclass
 class AccelerationData:
@@ -216,8 +218,7 @@ class SerialData:
     def __init__(self):
         self._ser = serial.Serial()
         self._ser.baudrate = 115200
-        # self._ser.port = list(serial.tools.list_ports.comports())[0].device
-        self._ser.port = 'COM3'
+        self._ser.port = list(serial.tools.list_ports.comports())[0].device
         self._ser.open()
 
     def read_from_serial(self):
@@ -236,33 +237,23 @@ class SerialData:
                         break
                 if found:
                     return
-
         self._ser.reset_input_buffer()
         align_to_header(self._ser)
         num_readings = 65
         return unpack(f">{num_readings}h", self._ser.read(num_readings * 2))
 
 
-def main():
+SHUTDOWN_PIN = 18
+
+if __name__ == "__main__":
     # Initialise gui display and serial instance
     serial_instance = SerialData()
     app_instance = AppWindow()
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(SHUTDOWN_PIN, GPIO.IN)
 
     while app_instance._app.run_one_tick():
         app_instance.update_geometry(serial_instance.read_from_serial())
-
-if __name__ == "__main__":
-    main()
-
-
-# This works but have to resort to removing/readding geometry because there is no method to update the colors
-# of the mesh in real time for the gui :(
-# However it does work when using the visualiser library
-# def update_geometry(self, fetal_head, i):
-#     transform = np.eye(4)
-#     transform[:3, :3] = fetal_head.get_rotation_matrix_from_xyz((i * np.pi/180, 0, 0))
-#
-#     self._widgetLeft.scene.set_geometry_transform("__fetal_head__", transform)
-#     self._widgetRight.scene.set_geometry_transform("__fetal_head__", transform)
-#
-#     self._window.post_redraw()
+        if GPIO.input(SHUTDOWN_PIN):
+            GPIO.cleanup()
+            os.system("sudo shutdown -h now")
