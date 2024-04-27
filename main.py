@@ -219,19 +219,33 @@ class SerialData:
         self._ser = serial.Serial()
         self._ser.baudrate = 115200
         self._ser.port = list(serial.tools.list_ports.comports())[0].device
-        self._ser.open()
+
+        TIMEOUT_SECONDS = 60
+        start_time = time.time()
+        print("Waiting for Arduino to become ready on COM port...")
+        while(True):
+            try:
+                self._ser.open()
+                break
+            except serial.serialutil.SerialException as e:
+                if (time.time() - start_time) > TIMEOUT_SECONDS:
+                    raise e
+        print("Done")
+        print("Waiting a few seconds to allow Arduino to bootstrap...")
+        time.sleep(6)
+        print("Done")
 
     def read_from_serial(self):
         def align_to_header(ser):
             header = [0xDE, 0xAD, 0xBE, 0xEF, 0xC0, 0x01, 0xCA, 0xFE]
-            max_attempts = 1000
             attempt_counter = 0
+            max_num_attempts = 1000
             while True:
                 found = True
                 for byte in header:
                     if byte != int.from_bytes(ser.read(), 'big'):
-                        if attempt_counter > max_attempts:
-                            raise ValueError("Could not find the header")
+                        if attempt_counter > max_num_attempts:
+                            raise ValueError("Valid header could not be read from serial port")
                         attempt_counter += 1
                         found = False
                         break
