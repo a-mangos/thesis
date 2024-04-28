@@ -270,4 +270,4 @@ if __name__ == "__main__":
         app_instance.update_geometry(serial_instance.read_from_serial())
         if GPIO.input(SHUTDOWN_PIN):
             GPIO.cleanup()
-            os.system("sudo shutdown -h now")
+            os.system("shutdown -h now")
