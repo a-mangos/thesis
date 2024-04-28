@@ -33,9 +33,10 @@ const bool Numbers [16] [4] = {{0, 0, 0, 0}, //0
 #define BUTTON_DEBOUNCE_DELAY   20   // [ms]
 
 Servo myservo;
-const int PowerPin = 6;
-const int forwardPin = 5;
-const int backPin = 3;
+const int PowerPin = 7;
+const int forwardPin = 6;
+const int backPin = 5;
+const int actuatorControlPin = 4;
 
 int microseconds = 1000;
 
@@ -50,7 +51,7 @@ void setup()
   forwardButton.setup(forwardPin, BUTTON_DEBOUNCE_DELAY, InputDebounce::PIM_EXT_PULL_DOWN_RES);
   backwardButton.setup(backPin, BUTTON_DEBOUNCE_DELAY, InputDebounce::PIM_EXT_PULL_DOWN_RES);
 
-  myservo.attach(7);
+  myservo.attach(actuatorControlPin);
   pinMode(PowerPin, OUTPUT);
   digitalWrite(PowerPin, HIGH);
 
