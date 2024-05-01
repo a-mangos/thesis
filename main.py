@@ -183,7 +183,6 @@ class AppWindow:
 
         self._fetal_head.rotate(new_position, self._fetal_head.get_center())
         self._previous_position = new_position
-        self._progressBar.value += 0.001
 
     def update_colour(self, serial_data):
         if (time.time() - self._last_pressure_decay_time) > 0.1:
