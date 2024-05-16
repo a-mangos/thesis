@@ -12,6 +12,9 @@ from struct import unpack
 import time
 import RPi.GPIO as GPIO
 import os
+import faulthandler
+import random
+import threading
 
 @dataclass
 class AccelerationData:
@@ -131,12 +134,12 @@ class AppWindow:
         self._widgetLeft.scene.add_geometry("__fetal_head__", self._fetal_head, self._mat)
         self._widgetLeft.scene.add_geometry("__coord_frame__", self._coord_frame, self._mat)
         self._widgetLeft.scene.camera.look_at(self._fetal_head.get_center(),
-                                              np.asarray([75, 50, 0]), np.asarray([0, 0, -1]))
+                                              np.asarray([75, 50, -25]), np.asarray([0, 0, -1]))
 
         self._widgetRight.scene.add_geometry("__fetal_head__", self._fetal_head, self._mat)
         self._widgetRight.scene.add_geometry("__coord_frame__", self._coord_frame, self._mat)
         self._widgetRight.scene.camera.look_at(self._fetal_head.get_center(),
-                                               np.asarray([-75, 50, 0]), np.asarray([0, 0, -1]))
+                                               np.asarray([-100, 0, 0]), np.asarray([0, 0, -1]))
 
     def set_window_layout(self):
         r = self._window.content_rect
@@ -187,30 +190,32 @@ class AppWindow:
     def update_colour(self, serial_data):
         if (time.time() - self._last_pressure_decay_time) > 0.1:
             for pin in self._pressure_readings.keys():
-                self._pressure_readings[pin] = max(self._pressure_readings[pin] * 0.7, 1)
+                self._pressure_readings[pin] = max(self._pressure_readings[pin] * 0.75, 1)
                 self._last_pressure_decay_time = time.time()
 
         for pin, vertices in self._pin_to_vertices_mapping.items():
             new_reading = serial_data[self._data_to_pin.get(pin)]
-            if new_reading < 50:
+            
+            if new_reading < 25:
                 new_reading = 1
-            if new_reading > 300:
-                new_reading = 300
+            if new_reading > 500:
+                new_reading = 500
             if pin not in self._pressure_readings or new_reading > self._pressure_readings[pin]:
                 self._pressure_readings[pin] = max(self._pressure_readings.get(pin, 1), new_reading)
-                # if pressure_readings.get(pin, 1) < new_reading:
-                #     pressure_readings[pin] = new_reading if new_reading > 30 else 1
 
             G_B_channels = 0.7 / self._pressure_readings.get(pin, 1)
             colour = [0.7, G_B_channels, G_B_channels]
+
             for vertex in vertices:
                 self._vertex_colors[vertex] = colour
 
 
 def calculate_head_rotation(acceleration_data: AccelerationData) -> float:
-    calibrated_x = (acceleration_data.x - 321) / 67
-    calibrated_y = (acceleration_data.y - 323.5) / 66.5
-    return -1 * (math.atan2(calibrated_x, calibrated_y) * 180 / math.pi - 46)
+    # calibrated_x = (acceleration_data.x - 321) / 67
+    # calibrated_y = (acceleration_data.y - 323.5) / 66.5
+    calibrated_x = (acceleration_data.x - 350)/67
+    calibrated_y = (acceleration_data.y - 350)/67
+    return math.atan2(calibrated_y, calibrated_x) * 180 / math.pi - 46
 
 
 class SerialData:
@@ -264,7 +269,7 @@ if __name__ == "__main__":
     app_instance = AppWindow()
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(SHUTDOWN_PIN, GPIO.IN)
-
+    
     while app_instance._app.run_one_tick():
         app_instance.update_geometry(serial_instance.read_from_serial())
         if GPIO.input(SHUTDOWN_PIN):
