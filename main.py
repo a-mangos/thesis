@@ -10,10 +10,10 @@ import math
 import pickle
 from struct import unpack
 import time
-# import RPi.GPIO as GPIO
-# import os
-# import random
-# import threading
+import RPi.GPIO as GPIO
+import os
+import random
+import threading
 
 @dataclass
 class AccelerationData:
@@ -292,12 +292,13 @@ if __name__ == "__main__":
     serial_instance = SerialData()
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(SHUTDOWN_PIN, GPIO.IN)
+
     while True:
         i = 0
         app_instance = AppWindow()
         while app_instance._app.run_one_tick():
             i += 1
-            if i == 16000:
+            if i > 16000:
                 break
             raw = serial_instance.read_from_serial()
             calibrated = calibrate(raw)
