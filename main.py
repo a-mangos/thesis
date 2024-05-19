@@ -296,6 +296,7 @@ if __name__ == "__main__":
     while True:
         i = 0
         app_instance = AppWindow()
+        
         while app_instance._app.run_one_tick():
             i += 1
             if i > 16000:
@@ -303,8 +304,10 @@ if __name__ == "__main__":
             raw = serial_instance.read_from_serial()
             calibrated = calibrate(raw)
             app_instance.update_geometry(calibrated)
+        
             if GPIO.input(SHUTDOWN_PIN):
                 GPIO.cleanup()
                 os.system("shutdown -h now")
         app_instance._app.quit()
         del app_instance
+    
