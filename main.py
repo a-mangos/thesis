@@ -10,11 +10,10 @@ import math
 import pickle
 from struct import unpack
 import time
-import RPi.GPIO as GPIO
-import os
-import faulthandler
-import random
-import threading
+# import RPi.GPIO as GPIO
+# import os
+# import random
+# import threading
 
 @dataclass
 class AccelerationData:
@@ -86,7 +85,7 @@ class AppWindow:
         self._app = o3d.visualization.gui.Application.instance
         self._app.initialize()
 
-        self._window = self._app.create_window("Birth Simulator", width=1024, height=600)
+        self._window = self._app.create_window("Birth Simulator", width=1920, height=1080)
 
         self._widgetLeft = gui.SceneWidget()
         self._widgetLeft.scene = rendering.Open3DScene(self._window.renderer)
@@ -196,10 +195,10 @@ class AppWindow:
         for pin, vertices in self._pin_to_vertices_mapping.items():
             new_reading = serial_data[self._data_to_pin.get(pin)]
             
-            if new_reading < 25:
+            if new_reading < 8:
                 new_reading = 1
-            if new_reading > 500:
-                new_reading = 500
+            if new_reading > 512:
+                new_reading = 512
             if pin not in self._pressure_readings or new_reading > self._pressure_readings[pin]:
                 self._pressure_readings[pin] = max(self._pressure_readings.get(pin, 1), new_reading)
 
@@ -213,8 +212,8 @@ class AppWindow:
 def calculate_head_rotation(acceleration_data: AccelerationData) -> float:
     # calibrated_x = (acceleration_data.x - 321) / 67
     # calibrated_y = (acceleration_data.y - 323.5) / 66.5
-    calibrated_x = (acceleration_data.x - 350)/67
-    calibrated_y = (acceleration_data.y - 350)/67
+    calibrated_x = (acceleration_data.x - 325)/67
+    calibrated_y = (acceleration_data.y - 325)/67
     return math.atan2(calibrated_y, calibrated_x) * 180 / math.pi - 46
 
 
@@ -258,20 +257,53 @@ class SerialData:
         self._ser.reset_input_buffer()
         align_to_header(self._ser)
         num_readings = 65
-        return unpack(f">{num_readings}h", self._ser.read(num_readings * 2))
+        return list(unpack(f">{num_readings}h", self._ser.read(num_readings * 2)))
 
+
+def calibrate(serial_data):
+    # Manually offset some values because of the cap pressure
+    serial_data[0] = max(serial_data[0] - 8, 0)
+    serial_data[2] = max(serial_data[2] - 12, 0)
+    serial_data[3] = max(serial_data[3] - 2, 0)
+    serial_data[4] = max(serial_data[4] - 26, 0)
+    serial_data[10] = max(serial_data[10] - 22, 0)
+    serial_data[11] = max(serial_data[11] - 2, 0)
+    serial_data[21] = max(serial_data[21] - 20, 0)
+    serial_data[25] = max(serial_data[25] - 2, 0)
+    serial_data[26] = max(serial_data[26] - 6, 0)
+    serial_data[27] = max(serial_data[27] - 25, 0)
+    serial_data[37] = max(serial_data[37] - 16, 0)
+    serial_data[39] = max(serial_data[39] - 6, 0)
+    serial_data[43] = max(serial_data[43] - 5, 0)
+    serial_data[44] = max(serial_data[44] - 11, 0)
+    serial_data[49] = max(serial_data[49] - 2, 0)
+    serial_data[50] = max(serial_data[50] - 4, 0)
+    serial_data[53] = max(serial_data[53] - 14, 0)
+    serial_data[54] = max(serial_data[54] - 24, 0)
+    serial_data[57] = max(serial_data[57] - 24, 0)
+    serial_data[58] = max(serial_data[58] - 3, 0)
+    serial_data[60] = max(serial_data[60] - 25, 0)
+    return serial_data
 
 SHUTDOWN_PIN = 18
 
 if __name__ == "__main__":
     # Initialise gui display and serial instance
     serial_instance = SerialData()
-    app_instance = AppWindow()
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(SHUTDOWN_PIN, GPIO.IN)
-    
-    while app_instance._app.run_one_tick():
-        app_instance.update_geometry(serial_instance.read_from_serial())
-        if GPIO.input(SHUTDOWN_PIN):
-            GPIO.cleanup()
-            os.system("shutdown -h now")
+    while True:
+        i = 0
+        app_instance = AppWindow()
+        while app_instance._app.run_one_tick():
+            i += 1
+            if i == 16000:
+                break
+            raw = serial_instance.read_from_serial()
+            calibrated = calibrate(raw)
+            app_instance.update_geometry(calibrated)
+            if GPIO.input(SHUTDOWN_PIN):
+                GPIO.cleanup()
+                os.system("shutdown -h now")
+        app_instance._app.quit()
+        del app_instance
