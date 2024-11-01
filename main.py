@@ -99,7 +99,7 @@ class AppWindow:
         self._progressBar.value = 0
         self._window.add_child(self._progressBar)
 
-        self._forceGraph = gui.ImageWidget("force_gradient_final")
+        self._forceGraph = gui.ImageWidget("force_gradient_final.jpg")
         self._window.add_child(self._forceGraph)
 
         self._coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100)
@@ -129,22 +129,23 @@ class AppWindow:
 
     def set_window_layout(self):
         r = self._window.content_rect
-        vertical_scale_factor = 15/16
-        horizontal_scale_factor = 7/8
+        scale_factor = 15/16
         self._widgetLeft.frame = gui.Rect(r.x,
                                           r.y,
-                                          (r.width / 2) * horizontal_scale_factor,
-                                          r.height * vertical_scale_factor)
-        self._widgetRight.frame = gui.Rect((r.x + r.width / 2 + 1) * horizontal_scale_factor,
+                                          (r.width / 2) * scale_factor,
+                                          r.height * scale_factor)
+        self._widgetRight.frame = gui.Rect((r.x + r.width / 2 + 1) * scale_factor,
                                            r.y,
-                                           (r.width / 2) * horizontal_scale_factor,
-                                           r.height * vertical_scale_factor)
+                                           (r.width / 2) * scale_factor,
+                                           r.height * scale_factor)
         self._progressBar.frame = gui.Rect(r.x,
-                                           r.y + r.height * vertical_scale_factor,
-                                           r.width * horizontal_scale_factor,
-                                           r.height * (1 - vertical_scale_factor))
-        # self._forceGraph.frame = gui.Rect((r.x + r.width) * horizontal_scale_factor,
-        #                                   )
+                                           r.y + r.height * scale_factor,
+                                           r.width * scale_factor,
+                                           r.height * (1 - scale_factor))
+        self._forceGraph.frame = gui.Rect((r.x + r.width) * scale_factor,
+                                          r.y,
+                                          r.width * (1 - scale_factor),
+                                          r.height)
 
     def setup_scenes(self):
         self._widgetLeft.scene.clear_geometry()
