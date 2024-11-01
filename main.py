@@ -216,12 +216,20 @@ class AppWindow:
             # 550 pressure sensor reading through the cap is around 15N force on the sensor.
             if new_reading > 550:
                 new_reading = 550
+            # normalise data
+            new_reading = (new_reading - 1)/(550 - 1)
             if pin not in self._pressure_readings or new_reading > self._pressure_readings[pin]:
                 self._pressure_readings[pin] = max(self._pressure_readings.get(pin, 1), new_reading)
 
-            # [0.7, 0.7, 0.7] is the grey colour of the head
-            G_B_channels = 0.7 / self._pressure_readings.get(pin, 1)
-            colour = [0.7 - G_B_channels, G_B_channels, 0]
+            reading = self._pressure_readings.get(pin, 1)
+            colour = [1 - reading, reading, 0]
+
+            # if pin not in self._pressure_readings or new_reading > self._pressure_readings[pin]:
+            #     self._pressure_readings[pin] = max(self._pressure_readings.get(pin, 1), new_reading)
+            #
+            # # [0.7, 0.7, 0.7] is the grey colour of the head
+            # G_B_channels = 1 / self._pressure_readings.get(pin, 1)
+            # colour = [1 - G_B_channels, G_B_channels, 0]
 
             for vertex in vertices:
                 self._vertex_colors[vertex] = colour
