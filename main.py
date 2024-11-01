@@ -203,15 +203,13 @@ class AppWindow:
                 self._pressure_readings[pin] = max(self._pressure_readings.get(pin, 1), new_reading)
 
             G_B_channels = 0.7 / self._pressure_readings.get(pin, 1)
-            colour = [0.7, G_B_channels, G_B_channels]
+            colour = [0.7 - G_B_channels, G_B_channels, 0]
 
             for vertex in vertices:
                 self._vertex_colors[vertex] = colour
 
 
 def calculate_head_rotation(acceleration_data: AccelerationData) -> float:
-    # calibrated_x = (acceleration_data.x - 321) / 67
-    # calibrated_y = (acceleration_data.y - 323.5) / 66.5
     calibrated_x = (acceleration_data.x - 325)/67
     calibrated_y = (acceleration_data.y - 325)/67
     return math.atan2(calibrated_y, calibrated_x) * 180 / math.pi - 46
