@@ -99,6 +99,9 @@ class AppWindow:
         self._progressBar.value = 0
         self._window.add_child(self._progressBar)
 
+        self._forceGraph = gui.ImageWidget("force_gradient_final")
+        self._window.add_child(self._forceGraph)
+
         self._coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100)
         self._fetal_head = self.load_fetal_head("whole_head_model.STL")
 
@@ -124,6 +127,25 @@ class AppWindow:
 
         return fetal_head
 
+    def set_window_layout(self):
+        r = self._window.content_rect
+        vertical_scale_factor = 15/16
+        horizontal_scale_factor = 7/8
+        self._widgetLeft.frame = gui.Rect(r.x,
+                                          r.y,
+                                          (r.width / 2) * horizontal_scale_factor,
+                                          r.height * vertical_scale_factor)
+        self._widgetRight.frame = gui.Rect((r.x + r.width / 2 + 1) * horizontal_scale_factor,
+                                           r.y,
+                                           (r.width / 2) * horizontal_scale_factor,
+                                           r.height * vertical_scale_factor)
+        self._progressBar.frame = gui.Rect(r.x,
+                                           r.y + r.height * vertical_scale_factor,
+                                           r.width * horizontal_scale_factor,
+                                           r.height * (1 - vertical_scale_factor))
+        # self._forceGraph.frame = gui.Rect((r.x + r.width) * horizontal_scale_factor,
+        #                                   )
+
     def setup_scenes(self):
         self._widgetLeft.scene.clear_geometry()
         self._widgetRight.scene.clear_geometry()
@@ -139,13 +161,6 @@ class AppWindow:
         self._widgetRight.scene.add_geometry("__coord_frame__", self._coord_frame, self._mat)
         self._widgetRight.scene.camera.look_at(self._fetal_head.get_center(),
                                                np.asarray([-100, 0, 0]), np.asarray([0, 0, -1]))
-
-    def set_window_layout(self):
-        r = self._window.content_rect
-        scale_factor = 15/16
-        self._widgetLeft.frame = gui.Rect(r.x, r.y, r.width / 2, r.height * scale_factor)
-        self._widgetRight.frame = gui.Rect(r.x + r.width / 2 + 1, r.y, r.width / 2, r.height * scale_factor)
-        self._progressBar.frame = gui.Rect(r.x, r.y + r.height * scale_factor, r.width, r.height * (1 - scale_factor))
 
     def initial_transform(self):
         # Initial offset from original model to line up the head with axes of render
