@@ -205,7 +205,7 @@ class AppWindow:
 
             # [0.7, 0.7, 0.7] is the grey colour of the head
             G_B_channels = 0.7 / self._pressure_readings.get(pin, 1)
-            colour = [0.7 - G_B_channels, G_B_channels, G_B_channels]
+            colour = [0.7 - G_B_channels, G_B_channels, 0]
 
             for vertex in vertices:
                 self._vertex_colors[vertex] = colour
