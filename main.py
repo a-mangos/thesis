@@ -205,7 +205,7 @@ class AppWindow:
     def update_colour(self, serial_data):
         if (time.time() - self._last_pressure_decay_time) > 0.1:
             for pin in self._pressure_readings.keys():
-                self._pressure_readings[pin] = max(self._pressure_readings[pin] * 0.75, 1)
+                self._pressure_readings[pin] = max(self._pressure_readings[pin] * 0.5, 1)
                 self._last_pressure_decay_time = time.time()
 
         for pin, vertices in self._pin_to_vertices_mapping.items():
@@ -216,12 +216,13 @@ class AppWindow:
             # 550 pressure sensor reading through the cap is around 15N force on the sensor.
             if new_reading > 550:
                 new_reading = 550
-            # normalise data
-            new_reading = (new_reading - 1)/(550 - 1)
+
             if pin not in self._pressure_readings or new_reading > self._pressure_readings[pin]:
                 self._pressure_readings[pin] = max(self._pressure_readings.get(pin, 1), new_reading)
 
+            # normalise data
             reading = self._pressure_readings.get(pin, 1)
+            reading = (reading - 1)/(550 - 1)
             colour = [1 - reading, reading, 0]
 
             # if pin not in self._pressure_readings or new_reading > self._pressure_readings[pin]:
@@ -303,7 +304,6 @@ def calibrate(serial_data):
     serial_data[58] = max(serial_data[58] - 54, 0)
     serial_data[59] = max(serial_data[59] - 195, 0)
     serial_data[60] = max(serial_data[60] - 21, 0)
-    print(serial_data)
     return serial_data
 
 SHUTDOWN_PIN = 18
