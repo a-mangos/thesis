@@ -277,7 +277,6 @@ class SerialData:
 
 
 def calibrate(serial_data):
-    print(serial_data)
     # Manually offset some values because of the cap pressure
     serial_data[0] = max(serial_data[0] - 9, 0)
     serial_data[4] = max(serial_data[4] - 1, 0)
@@ -296,6 +295,7 @@ def calibrate(serial_data):
     serial_data[58] = max(serial_data[58] - 54, 0)
     serial_data[59] = max(serial_data[59] - 195, 0)
     serial_data[60] = max(serial_data[60] - 21, 0)
+    print(serial_data)
     return serial_data
 
 SHUTDOWN_PIN = 18
