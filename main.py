@@ -262,27 +262,23 @@ class SerialData:
 
 def calibrate(serial_data):
     # Manually offset some values because of the cap pressure
-    serial_data[0] = max(serial_data[0] - 8, 0)
-    serial_data[2] = max(serial_data[2] - 12, 0)
-    serial_data[3] = max(serial_data[3] - 2, 0)
-    serial_data[4] = max(serial_data[4] - 26, 0)
-    serial_data[10] = max(serial_data[10] - 22, 0)
+    serial_data[0] = max(serial_data[0] - 9, 0)
+    serial_data[4] = max(serial_data[4] - 1, 0)
+    serial_data[6] = max(serial_data[6] - 31, 0)
+    serial_data[7] = max(serial_data[7] - 1, 0)
+    serial_data[9] = max(serial_data[9] - 1, 0)
+    serial_data[10] = max(serial_data[10] - 14, 0)
     serial_data[11] = max(serial_data[11] - 2, 0)
-    serial_data[21] = max(serial_data[21] - 20, 0)
-    serial_data[25] = max(serial_data[25] - 2, 0)
-    serial_data[26] = max(serial_data[26] - 6, 0)
-    serial_data[27] = max(serial_data[27] - 25, 0)
-    serial_data[37] = max(serial_data[37] - 16, 0)
+    serial_data[27] = max(serial_data[27] - 8, 0)
+    serial_data[37] = max(serial_data[37] - 10, 0)
     serial_data[39] = max(serial_data[39] - 6, 0)
-    serial_data[43] = max(serial_data[43] - 5, 0)
-    serial_data[44] = max(serial_data[44] - 11, 0)
-    serial_data[49] = max(serial_data[49] - 2, 0)
-    serial_data[50] = max(serial_data[50] - 4, 0)
-    serial_data[53] = max(serial_data[53] - 14, 0)
-    serial_data[54] = max(serial_data[54] - 24, 0)
-    serial_data[57] = max(serial_data[57] - 24, 0)
-    serial_data[58] = max(serial_data[58] - 3, 0)
-    serial_data[60] = max(serial_data[60] - 25, 0)
+    serial_data[50] = max(serial_data[50] - 2, 0)
+    serial_data[53] = max(serial_data[53] - 6, 0)
+    serial_data[54] = max(serial_data[54] - 36, 0)
+    serial_data[57] = max(serial_data[57] - 13, 0)
+    serial_data[58] = max(serial_data[58] - 54, 0)
+    serial_data[59] = max(serial_data[59] - 195, 0)
+    serial_data[60] = max(serial_data[60] - 21, 0)
     return serial_data
 
 SHUTDOWN_PIN = 18
@@ -300,6 +296,9 @@ if __name__ == "__main__":
         while app_instance._app.run_one_tick():
             i += 1
             if i > 16000:
+                app_instance._app.quit()
+                del app_instance
+                time.sleep(1)
                 break
             raw = serial_instance.read_from_serial()
             calibrated = calibrate(raw)
@@ -308,6 +307,3 @@ if __name__ == "__main__":
             if GPIO.input(SHUTDOWN_PIN):
                 GPIO.cleanup()
                 os.system("shutdown -h now")
-        app_instance._app.quit()
-        del app_instance
-    
