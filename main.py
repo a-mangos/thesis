@@ -215,9 +215,12 @@ class AppWindow:
             # minimum threshold to reduce noise
             if new_reading < 8:
                 new_reading = min_reading
-            # 550 pressure sensor reading through the cap is around 15N force on the sensor.
-            # 365 "                                               " 10N "                  "
-            max_reading = 365
+            # pressure sensor reading to force (N) mapping:
+            #   550 = 15N
+            #   365 = 10N
+            #   275 = 7.5N
+            #   182 = 5N
+            max_reading = 182
             if new_reading > max_reading:
                 new_reading = max_reading
 
