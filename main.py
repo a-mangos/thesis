@@ -210,21 +210,26 @@ class AppWindow:
 
         for pin, vertices in self._pin_to_vertices_mapping.items():
             new_reading = serial_data[self._data_to_pin.get(pin)]
-            
+
+            min_reading = 1
+            # minimum threshold to reduce noise
             if new_reading < 8:
-                new_reading = 1
+                new_reading = min_reading
             # 550 pressure sensor reading through the cap is around 15N force on the sensor.
-            if new_reading > 550:
-                new_reading = 550
+            # 365 "                                               " 10N "                  "
+            max_reading = 365
+            if new_reading > max_reading:
+                new_reading = max_reading
 
             if pin not in self._pressure_readings or new_reading > self._pressure_readings[pin]:
                 self._pressure_readings[pin] = max(self._pressure_readings.get(pin, 1), new_reading)
 
             # normalise data
             reading = self._pressure_readings.get(pin, 1)
-            reading = (reading - 1)/(550 - 1)
-            colour = [1 - reading, reading, 0]
+            reading = (reading - min_reading)/(max_reading - min_reading)
+            colour = [reading, 1 - reading, 0]
 
+            # old method. Grey->red
             # if pin not in self._pressure_readings or new_reading > self._pressure_readings[pin]:
             #     self._pressure_readings[pin] = max(self._pressure_readings.get(pin, 1), new_reading)
             #
